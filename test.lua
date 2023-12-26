@@ -548,45 +548,45 @@ local function disassemble(a1, showOps)
 					--output = output .. string.format("gforloop - iterate + goto #%i", codeIndex + aux);
 				elseif opc == getOpCode("JUMP") then
 					addReference(codeIndex, codeIndex + sBx);
-					output = output .. string.format("goto #%i", codeIndex + sBx);
+					output = output .. string.format("-- goto #%i", codeIndex + sBx);
 				elseif opc == getOpCode("JUMPBACK") then
 					addReference(codeIndex, codeIndex + sBx);
-					output = output .. string.format("goto #%i", codeIndex + sBx);
+					output = output .. string.format("-- goto #%i", codeIndex + sBx);
 				elseif opc == getOpCode("JUMPX") then
 					addReference(codeIndex, codeIndex + sBx);
-					output = output .. string.format("goto #%i", codeIndex + sAx);
+					output = output .. string.format("-- goto #%i", codeIndex + sAx);
 				elseif opc == getOpCode("JUMPIFEQK") then
 					local k = proto.kTable[aux + 1] or nilValue;
 					addReference(codeIndex, codeIndex + sBx);
-					output = output .. string.format("goto #%i if var%i == %s", codeIndex + sBx, A, (type(k.value) == "string") and ("\"" .. k.value .. "\"") or tostring(k.value));
+					output = output .. string.format("-- goto #%i if var%i == %s", codeIndex + sBx, A, (type(k.value) == "string") and ("\"" .. k.value .. "\"") or tostring(k.value));
 				elseif opc == getOpCode("JUMPIFNOTEQK") then
 					local k = proto.kTable[aux + 1] or nilValue;
 					addReference(codeIndex, codeIndex + sBx);
-					output = output .. string.format("goto #%i if var%i ~= %s", codeIndex + sBx, A, (type(k.value) == "string") and ("\"" .. k.value .. "\"") or tostring(k.value));
+					output = output .. string.format("-- goto #%i if var%i ~= %s", codeIndex + sBx, A, (type(k.value) == "string") and ("\"" .. k.value .. "\"") or tostring(k.value));
 				elseif opc == getOpCode("JUMPIF") then
 					addReference(codeIndex, codeIndex + sBx);
-					output = output .. string.format("goto #%i if var%i", codeIndex + sBx, A);
+					output = output .. string.format("-- goto #%i if var%i", codeIndex + sBx, A);
 				elseif opc == getOpCode("JUMPIFNOT") then
 					addReference(codeIndex, codeIndex + sBx);
-					output = output .. string.format("goto #%i if not var%i", codeIndex + sBx, A);
+					output = output .. string.format("-- goto #%i if not var%i", codeIndex + sBx, A);
 				elseif opc == getOpCode("JUMPIFEQ") then
 					addReference(codeIndex, codeIndex + sBx);
-					output = output .. string.format("goto #%i if var%i == var%i", codeIndex + sBx, A, aux);
+					output = output .. string.format("-- goto #%i if var%i == var%i", codeIndex + sBx, A, aux);
 				elseif opc == getOpCode("JUMPIFNOTEQ") then
 					addReference(codeIndex, codeIndex + sBx);
-					output = output .. string.format("goto #%i if var%i ~= var%i", codeIndex + sBx, A, aux);
+					output = output .. string.format("-- goto #%i if var%i ~= var%i", codeIndex + sBx, A, aux);
 				elseif opc == getOpCode("JUMPIFLE") then
 					addReference(codeIndex, codeIndex + sBx);
-					output = output .. string.format("goto #%i if var%i <= var%i", codeIndex + sBx, A, aux);
+					output = output .. string.format("-- goto #%i if var%i <= var%i", codeIndex + sBx, A, aux);
 				elseif opc == getOpCode("JUMPIFNOTLE") then
 					addReference(codeIndex, codeIndex + sBx);
-					output = output .. string.format("goto #%i if var%i > var%i", codeIndex + sBx, A, aux);
+					output = output .. string.format("-- goto #%i if var%i > var%i", codeIndex + sBx, A, aux);
 				elseif opc == getOpCode("JUMPIFLT") then
 					addReference(codeIndex, codeIndex + sBx);
-					output = output .. string.format("goto #%i if var%i < var%i", codeIndex + sBx, A, aux);
+					output = output .. string.format("-- goto #%i if var%i < var%i", codeIndex + sBx, A, aux);
 				elseif opc == getOpCode("JUMPIFNOTLT") then
 					addReference(codeIndex, codeIndex + sBx);
-					output = output .. string.format("goto #%i if var%i >= var%i", codeIndex + sBx, A, aux);
+					output = output .. string.format("-- goto #%i if var%i >= var%i", codeIndex + sBx, A, aux);
 				elseif opc == getOpCode("ADD") then
 					output = output .. string.format("var%i = var%i + var%i", A, B, C);
 				elseif opc == getOpCode("ADDK") then
