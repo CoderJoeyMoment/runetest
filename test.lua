@@ -103,7 +103,7 @@ local function deserialize(bytecode)
 				elseif k.type == 6 then -- closure
 					k.value = reader:nextVarInt() + 1 -- closure id
 				elseif k.type ~= 0 then
-					error(string.format("Unrecognized constant type: %i", k.type))
+					print(string.format("Unrecognized constant type: %i", k.type))
 				end
 				proto.kTable[j] = k
 			end
