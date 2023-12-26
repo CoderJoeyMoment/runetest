@@ -26,7 +26,7 @@ local function deserialize(bytecode)
 				c1 = reader:nextByte()
 				c2 = bit32.band(c1, 0x7F)
 				r = bit32.bor(r, bit32.lshift(c2, b))
-				b += 7
+				b = b + 7
 			until not bit32.btest(c1, 0x80)
 			return r;
 		end
@@ -56,6 +56,8 @@ local function deserialize(bytecode)
 		local protoTable = {}
 		local stringTable = {}
 
+		reader:nextByte(); --[[ yeah...idk ]]
+
 		local sizeStrings = reader:nextVarInt()
 		for i = 1,sizeStrings do
 			stringTable[i] = reader:nextString()
@@ -77,6 +79,11 @@ local function deserialize(bytecode)
 			proto.numParams = reader:nextByte()
 			proto.numUpValues = reader:nextByte()
 			proto.isVarArg = reader:nextByte()
+
+			if (status == 4) then
+				proto.flags = reader:nextByte()
+				proto.typeinfo = reader:nextString()
+			end
 
 			proto.sizeCode = reader:nextVarInt()
 			for j = 1,proto.sizeCode do
@@ -133,7 +140,7 @@ local function deserialize(bytecode)
 			end
 
 			if (reader:nextByte() == 1) then -- Has Debug info?
-				error'decompile() can only be called on ROBLOX scripts'
+				error'disassemble() can only be called on ROBLOX scripts'
 			end
 		end
 
@@ -144,172 +151,6 @@ local function deserialize(bytecode)
 		return nil;
 	end
 end
-
-local function get_constant_string(k) 
-	if (type(k) == "string") then
-		local res = "\""
-
-		if (k == "\"") then 
-			res ..= "\\\""
-		elseif (k == "\\") then
-			res ..= "\\\\"
-		elseif (k == "\a") then
-			res ..= "\\a"
-		elseif (k == "\b") then
-			res ..= "\\b"
-		elseif (k == "\f") then
-			res ..= "\\f"
-		elseif (k == "\n") then
-			res ..= "\\n"
-		elseif (k == "\r") then
-			res ..= "\\r"
-		elseif (k == "\t") then
-			res ..= "\\t"
-		elseif (k == "\v") then
-			res ..= "\\v"
-		else
-			k = k:gsub("\"", "\\\"")
-			k = k:gsub("\\", "\\\\")
-			k = k:gsub("\a", "\\a")
-			k = k:gsub("\b", "\\b")
-			k = k:gsub("\f", "\\f")
-			k = k:gsub("\n", "\\n")
-			k = k:gsub("\r", "\\r")
-			k = k:gsub("\t", "\\t")
-			k = k:gsub("\v", "\\v")
-
-			res ..= k
-		end
-
-		return (res .. "\"")
-	elseif (type(k) == "number") then 
-		k = string.format("%4.3f", k)
-	elseif (type(k) == "boolean") then
-		return (k == true and "true" or "false")
-	end
-
-	return k
-end 
-
-local function is_whitespace(k)
-	local old_str = k;
-	k = k:gsub("\"", "\\\"")
-	k = k:gsub("\\", "\\\\")
-	k = k:gsub("\a", "\\a")
-	k = k:gsub("\b", "\\b")
-	k = k:gsub("\f", "\\f")
-	k = k:gsub("\n", "\\n")
-	k = k:gsub("\r", "\\r")
-	k = k:gsub("\t", "\\t")
-	k = k:gsub("\v", "\\v")
-	k = k:gsub("\32", "_")
-	return (old_str ~= k)
-end
-
-local fast_call_data = {
-	{ "UNKNOWN_FASTCALL", 0, 0 }, -- name, arguments, results
-	{ "assert", 2, -1 },
-
-	-- math
-	{ "math.abs", 1, 1 },
-	{ "math.acos", 1, 1 },
-	{ "math.asin", 1, 1 },
-	{ "math.atan2", 1, 1 },
-	{ "math.ceil", 1, 1 },
-	{ "math.deg", 1, 1 },
-	{ "math.exp", 1, 1 },
-	{ "math.floor", 1, 1 },
-}
-
-local fast_call_string = {
-	[0] = "UNKNOWN_FASTCALL",
-	"assert",
-
-	"math.abs",
-	"math.acos",
-	"math.asin",
-	"math.atan2",
-	"math.atan",
-	"math.ceil",
-	"math.cosh",
-	"math.cos",
-	"math.deg",
-	"math.exp",
-	"math.floor",
-	"math.fmod",
-	"math.frexp",
-	"math.ldexp",
-	"math.log10",
-	"math.log",
-	"math.max",
-	"math.min",
-	"math.modf",
-	"math.pow",
-	"math.rad",
-	"math.sinh",
-	"math.sin",
-	"math.sqrt",
-	"math.tanh",
-	"math.tan",
-
-	"bit32.arshift",
-	"bit32.band",
-	"bit32.bnot",
-	"bit32.bor",
-	"bit32.bxor",
-	"bit32.btest",
-	"bit32.extract",
-	"bit32.lrotate",
-	"bit32.lshift",
-	"bit32.replace",
-	"bit32.rrotate",
-	"bit32.rshift",
-
-	"type",
-
-	"string.byte",
-	"string.char",
-	"string.len",
-
-	"typeof",
-
-	"string.sub",
-
-	"math.clamp",
-	"math.sign",
-	"math.round",
-
-	"rawset",
-	"rawget",
-	"rawequal",
-
-	"table.tinsert",
-	"table.unpack",
-
-	'Vector3.new', -- maybe idk
-
-	"bit32.countlz",
-	"bit32.countrz",
-
-	"select",
-
-	"rawlen",
-
-	'bit32.extractk',
-
-	"getmetatable",
-	"setmetatable",
-
-	-- 64 bit stuff (roblo)
-	"luauF_missing", "luauF_missing", "luauF_missing", "luauF_missing", "luauF_missing", "luauF_missing", "luauF_missing", "luauF_missing",
-	"luauF_missing", "luauF_missing", "luauF_missing", "luauF_missing", "luauF_missing", "luauF_missing", "luauF_missing", "luauF_missing",
-	"luauF_missing", "luauF_missing", "luauF_missing", "luauF_missing", "luauF_missing", "luauF_missing", "luauF_missing", "luauF_missing",
-	"luauF_missing", "luauF_missing", "luauF_missing", "luauF_missing", "luauF_missing", "luauF_missing", "luauF_missing", "luauF_missing",
-	"luauF_missing", "luauF_missing", "luauF_missing", "luauF_missing", "luauF_missing", "luauF_missing", "luauF_missing", "luauF_missing",
-	"luauF_missing", "luauF_missing", "luauF_missing", "luauF_missing", "luauF_missing", "luauF_missing", "luauF_missing", "luauF_missing",
-	"luauF_missing", "luauF_missing", "luauF_missing", "luauF_missing", "luauF_missing", "luauF_missing", "luauF_missing", "luauF_missing",
-	"luauF_missing", "luauF_missing", "luauF_missing", "luauF_missing", "luauF_missing", "luauF_missing", "luauF_missing", "luauF_missing",
-}
 
 local function getluauoptable()
 	return {
@@ -427,7 +268,171 @@ luau.GETARG_sBx = function(i) local Bx = luau.GETARG_Bx(i) local sBx = Bx + 1; i
 luau.GETARG_sAx = function(i) return bit32.rshift(i, 8) end
 luau.GET_OPCODE = function(i) return bit32.band(bit32.rshift(i, luau.POS_OP), luau.MASK1(luau.SIZE_OP, 0)) end
 
-local function decompile_script(a1, showOps)
+local fast_call_string = {
+	[0] = "UNKNOWN_FASTCALL",
+	"assert",
+
+	"math.abs",
+	"math.acos",
+	"math.asin",
+	"math.atan2",
+	"math.atan",
+	"math.ceil",
+	"math.cosh",
+	"math.cos",
+	"math.deg",
+	"math.exp",
+	"math.floor",
+	"math.fmod",
+	"math.frexp",
+	"math.ldexp",
+	"math.log10",
+	"math.log",
+	"math.max",
+	"math.min",
+	"math.modf",
+	"math.pow",
+	"math.rad",
+	"math.sinh",
+	"math.sin",
+	"math.sqrt",
+	"math.tanh",
+	"math.tan",
+
+	"bit32.arshift",
+	"bit32.band",
+	"bit32.bnot",
+	"bit32.bor",
+	"bit32.bxor",
+	"bit32.btest",
+	"bit32.extract",
+	"bit32.lrotate",
+	"bit32.lshift",
+	"bit32.replace",
+	"bit32.rrotate",
+	"bit32.rshift",
+
+	"type",
+
+	"string.byte",
+	"string.char",
+	"string.len",
+
+	"typeof",
+
+	"string.sub",
+
+	"math.clamp",
+	"math.sign",
+	"math.round",
+
+	"rawset",
+	"rawget",
+	"rawequal",
+
+	"table.tinsert",
+	"table.unpack",
+
+	'Vector3.new', -- maybe idk
+
+	"bit32.countlz",
+	"bit32.countrz",
+
+	"select",
+
+	"rawlen",
+
+	'bit32.extractk',
+
+	"getmetatable",
+	"setmetatable",
+
+	-- 64 bit stuff (roblo)
+	"luauF_missing", "luauF_missing", "luauF_missing", "luauF_missing", "luauF_missing", "luauF_missing", "luauF_missing", "luauF_missing",
+	"luauF_missing", "luauF_missing", "luauF_missing", "luauF_missing", "luauF_missing", "luauF_missing", "luauF_missing", "luauF_missing",
+	"luauF_missing", "luauF_missing", "luauF_missing", "luauF_missing", "luauF_missing", "luauF_missing", "luauF_missing", "luauF_missing",
+	"luauF_missing", "luauF_missing", "luauF_missing", "luauF_missing", "luauF_missing", "luauF_missing", "luauF_missing", "luauF_missing",
+	"luauF_missing", "luauF_missing", "luauF_missing", "luauF_missing", "luauF_missing", "luauF_missing", "luauF_missing", "luauF_missing",
+	"luauF_missing", "luauF_missing", "luauF_missing", "luauF_missing", "luauF_missing", "luauF_missing", "luauF_missing", "luauF_missing",
+	"luauF_missing", "luauF_missing", "luauF_missing", "luauF_missing", "luauF_missing", "luauF_missing", "luauF_missing", "luauF_missing",
+	"luauF_missing", "luauF_missing", "luauF_missing", "luauF_missing", "luauF_missing", "luauF_missing", "luauF_missing", "luauF_missing",
+}
+local function get_constant_string(k) 
+	if (type(k) == "string") then
+		local res = "\""
+
+		if (k == "\"") then 
+			res ..= "\\\""
+		elseif (k == "\\") then
+			res ..= "\\\\"
+		elseif (k == "\a") then
+			res ..= "\\a"
+		elseif (k == "\b") then
+			res ..= "\\b"
+		elseif (k == "\f") then
+			res ..= "\\f"
+		elseif (k == "\n") then
+			res ..= "\\n"
+		elseif (k == "\r") then
+			res ..= "\\r"
+		elseif (k == "\t") then
+			res ..= "\\t"
+		elseif (k == "\v") then
+			res ..= "\\v"
+		else
+			k = k:gsub("\"", "\\\"")
+			k = k:gsub("\\", "\\\\")
+			k = k:gsub("\a", "\\a")
+			k = k:gsub("\b", "\\b")
+			k = k:gsub("\f", "\\f")
+			k = k:gsub("\n", "\\n")
+			k = k:gsub("\r", "\\r")
+			k = k:gsub("\t", "\\t")
+			k = k:gsub("\v", "\\v")
+
+			res ..= k
+		end
+
+		return (res .. "\"")
+	elseif (type(k) == "number") then 
+		k = string.format("%4.3f", k)
+	elseif (type(k) == "boolean") then
+		return (k == true and "true" or "false")
+	end
+
+	return k
+end 
+
+local function is_whitespace(k)
+	local old_str = k;
+	k = k:gsub("\"", "\\\"")
+	k = k:gsub("\\", "\\\\")
+	k = k:gsub("\a", "\\a")
+	k = k:gsub("\b", "\\b")
+	k = k:gsub("\f", "\\f")
+	k = k:gsub("\n", "\\n")
+	k = k:gsub("\r", "\\r")
+	k = k:gsub("\t", "\\t")
+	k = k:gsub("\v", "\\v")
+	k = k:gsub("\32", "_")
+	return (old_str ~= k)
+end
+
+local fast_call_data = {
+	{ "UNKNOWN_FASTCALL", 0, 0 }, -- name, arguments, results
+	{ "assert", 2, -1 },
+
+	-- math
+	{ "math.abs", 1, 1 },
+	{ "math.acos", 1, 1 },
+	{ "math.asin", 1, 1 },
+	{ "math.atan2", 1, 1 },
+	{ "math.ceil", 1, 1 },
+	{ "math.deg", 1, 1 },
+	{ "math.exp", 1, 1 },
+	{ "math.floor", 1, 1 },
+}
+local function disassemble(a1, showOps)
 	if (typeof(a1):lower() == "instance") then
 		if not getscriptbytecode then error("Executor does not support getscriptbytecode") end
 		a1 = getscriptbytecode(a1);
@@ -458,8 +463,9 @@ local function decompile_script(a1, showOps)
 	mainProto.source = "main"
 	mainScope = {}; -- scope control, coming soon
 
+
 	local function readProto(proto, depth)
-		local output = "";
+		local output = "--decompiler by Stiven and vertov\n";
 
 		local function addTabSpace(depth)
 			output = output .. string.rep("    ", depth)
@@ -467,37 +473,32 @@ local function decompile_script(a1, showOps)
 
 		-- using function name (this will be removed & done outside of readProto)
 		if proto.source then
-			if (proto.source ~= "main") then
-				output = output .. proto.source .. " = function("
-			end
+			output = output .. proto.source .. " = function("
 		else
 			output = output .. "function("
 		end
 
-		if (proto.source and proto.source == "main") then 
-			output = output .. ("-- this script was decompiled by Large Games's decompiler!\n");
-		else 
-			for i = 1,proto.numParams do
-				output = output .. "a" .. (i - 1) -- args coincide with stack index
-				if i < proto.numParams then
-					output = output .. ", "
-				end
+		for i = 1,proto.numParams do
+			output = output .. "arg" .. (i - 1) -- args coincide with stack index
+			if i < proto.numParams then
+				output = output .. ", "
 			end
-
-			if proto.isVarArg ~= 0 then
-				if proto.numParams > 0 then
-					output = output .. ", "
-				end
-				output = output .. "..."
-			end
-
-			output = output .. ")\n"
-			depth = depth + 1
 		end
+
+		if proto.isVarArg ~= 0 then
+			if proto.numParams > 0 then
+				output = output .. ", "
+			end
+			output = output .. "..."
+		end
+
+		output = output .. ")\n"
+
+		depth = depth + 1
 
 		for i = 1,proto.numParams do
 			addTabSpace(depth);
-			output = output .. string.format("local v%i = a%i\n", i - 1, i - 1);
+			output = output .. string.format("local var%i = arg%i\n", i - 1, i - 1);
 		end
 
 		local refData = {}
@@ -929,18 +930,6 @@ local function decompile_script(a1, showOps)
 					end
 				end
 
-				--for _,v in pairs(refData) do
-				--	if v.codeIndex == codeIndex then
-				--		output = output .. " -- referenced by "
-				--		for j = 1,#v.refs do
-				--			output = output .. "#" .. v.refs[j]
-				--			if j < #v.refs - 1 then
-				--				output = output .. ", "
-				--			end
-				--		end
-				--	end
-				--end
-
 				output = output .. "\n"
 			end
 
@@ -963,10 +952,5 @@ local function decompile_script(a1, showOps)
 
 	return output
 end
-
-disassemble = (function(script)
-	return decompile_script(script)
-end)
-
 
 writefile("decompiled.lua", disassemble(game.StarterPlayer.StarterPlayerScripts.Scripts.Game.Machines.Daycare))
