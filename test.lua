@@ -301,7 +301,7 @@ local function disassemble(a1, showOps)
 
 
 	local function readProto(proto, depth)
-		local output = "";
+		local output = "--decompiler by Stiven and vertov\n";
 
 		local function addTabSpace(depth)
 			output = output .. string.rep("    ", depth)
@@ -800,4 +800,4 @@ local function disassemble(a1, showOps)
 	return output
 end
 
-writefile("decompiled.lua", disassemble(game.ReplicatedStorage.Library))
+writefile("decompiled.lua", disassemble(game.StarterPlayer.StarterPlayerScripts.Scripts.Game.Machines.Daycare))
