@@ -533,17 +533,17 @@ local function disassemble(a1, showOps)
 					nameCall = string.format("var%i:%s", B, tostring(k.value))
 					markedAux = true;
 				elseif opc == getOpCode("NFORPREP") then
-					output = output .. string.format("nforprep start - [escape at #%i] -- var%i = iterator", (codeIndex + sBx) + 1, A + 3);
+					output = output .. string.format("-- nforprep start - [escape at #%i] -- var%i = iterator", (codeIndex + sBx) + 1, A + 3);
 				elseif opc == getOpCode("NFORLOOP") then
-					output = output .. string.format("nforloop end - iterate + goto #%i", codeIndex + sBx);
+					output = output .. string.format("-- nforloop end - iterate + goto #%i", codeIndex + sBx);
 				elseif opc == getOpCode("PAIRSPREP") then
-					output = output .. string.format("pairsprep start - [escape at #%i] -- var%i = key, var%i = value", (codeIndex + sBx) + 1, A + 3, A + 4);
+					output = output .. string.format("-- pairsprep start - [escape at #%i] -- var%i = key, var%i = value", (codeIndex + sBx) + 1, A + 3, A + 4);
 				elseif opc == getOpCode("PAIRSLOOP") then
-					output = output .. string.format("pairsloop end - iterate + goto #%i", codeIndex + sBx);
+					output = output .. string.format("-- pairsloop end - iterate + goto #%i", codeIndex + sBx);
 				elseif opc == getOpCode("IPAIRSPREP") then
-					output = output .. string.format("ipairsprep start [escape at #%i] -- var%i = key, var%i = value", (codeIndex + sBx) + 1, A + 3, A + 4);
+					output = output .. string.format("-- ipairsprep start [escape at #%i] -- var%i = key, var%i = value", (codeIndex + sBx) + 1, A + 3, A + 4);
 				elseif opc == getOpCode("IPAIRSLOOP") then
-					output = output .. string.format("ipairsloop end - iterate + goto #%i", codeIndex + sBx);
+					output = output .. string.format("-- ipairsloop end - iterate + goto #%i", codeIndex + sBx);
 				elseif opc == getOpCode("TFORLOOP") then
 					--output = output .. string.format("gforloop - iterate + goto #%i", codeIndex + aux);
 				elseif opc == getOpCode("JUMP") then
