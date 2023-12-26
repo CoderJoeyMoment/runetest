@@ -475,7 +475,7 @@ local function decompile_script(a1, showOps)
 		end
 
 		if (proto.source and proto.source == "main") then 
-			output = output .. ("-- this script was decompiled by %s\n"):format(identifyexecutor());
+			output = output .. ("-- this script was decompiled by Large Games's decompiler!\n");
 		else 
 			for i = 1,proto.numParams do
 				output = output .. "a" .. (i - 1) -- args coincide with stack index
@@ -1264,13 +1264,7 @@ local function decompile_script(a1, showOps)
 end
 
 disassemble = (function(script)
-	local success, ret = pcall(decompile_script, script, false);
-
-	if (success == false) then 
-		return "-- script was unable to decompile or ignored"
-	end
-
-	return ret
+	return decompile_script(script)
 end)
 
 
