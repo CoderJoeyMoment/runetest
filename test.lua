@@ -26,7 +26,7 @@ local function deserialize(bytecode)
 				c1 = reader:nextByte()
 				c2 = bit32.band(c1, 0x7F)
 				r = bit32.bor(r, bit32.lshift(c2, b))
-				b = b + 7
+				b += 7
 			until not bit32.btest(c1, 0x80)
 			return r;
 		end
@@ -56,8 +56,6 @@ local function deserialize(bytecode)
 		local protoTable = {}
 		local stringTable = {}
 
-		reader:nextByte(); --[[ yeah...idk ]]
-
 		local sizeStrings = reader:nextVarInt()
 		for i = 1,sizeStrings do
 			stringTable[i] = reader:nextString()
@@ -77,13 +75,8 @@ local function deserialize(bytecode)
 			local proto = protoTable[i]
 			proto.maxStackSize = reader:nextByte()
 			proto.numParams = reader:nextByte()
-			proto.numupvs = reader:nextByte()
+			proto.numUpValues = reader:nextByte()
 			proto.isVarArg = reader:nextByte()
-
-			if (status == 4) then
-				proto.flags = reader:nextByte()
-				proto.typeinfo = reader:nextString()
-			end
 
 			proto.sizeCode = reader:nextVarInt()
 			for j = 1,proto.sizeCode do
@@ -140,7 +133,7 @@ local function deserialize(bytecode)
 			end
 
 			if (reader:nextByte() == 1) then -- Has Debug info?
-				error'disassemble() can only be called on ROBLOX scripts'
+				error'decompile() can only be called on ROBLOX scripts'
 			end
 		end
 
@@ -151,6 +144,172 @@ local function deserialize(bytecode)
 		return nil;
 	end
 end
+
+local function get_constant_string(k) 
+	if (type(k) == "string") then
+		local res = "\""
+
+		if (k == "\"") then 
+			res ..= "\\\""
+		elseif (k == "\\") then
+			res ..= "\\\\"
+		elseif (k == "\a") then
+			res ..= "\\a"
+		elseif (k == "\b") then
+			res ..= "\\b"
+		elseif (k == "\f") then
+			res ..= "\\f"
+		elseif (k == "\n") then
+			res ..= "\\n"
+		elseif (k == "\r") then
+			res ..= "\\r"
+		elseif (k == "\t") then
+			res ..= "\\t"
+		elseif (k == "\v") then
+			res ..= "\\v"
+		else
+			k = k:gsub("\"", "\\\"")
+			k = k:gsub("\\", "\\\\")
+			k = k:gsub("\a", "\\a")
+			k = k:gsub("\b", "\\b")
+			k = k:gsub("\f", "\\f")
+			k = k:gsub("\n", "\\n")
+			k = k:gsub("\r", "\\r")
+			k = k:gsub("\t", "\\t")
+			k = k:gsub("\v", "\\v")
+
+			res ..= k
+		end
+
+		return (res .. "\"")
+	elseif (type(k) == "number") then 
+		k = string.format("%4.3f", k)
+	elseif (type(k) == "boolean") then
+		return (k == true and "true" or "false")
+	end
+
+	return k
+end 
+
+local function is_whitespace(k)
+	local old_str = k;
+	k = k:gsub("\"", "\\\"")
+	k = k:gsub("\\", "\\\\")
+	k = k:gsub("\a", "\\a")
+	k = k:gsub("\b", "\\b")
+	k = k:gsub("\f", "\\f")
+	k = k:gsub("\n", "\\n")
+	k = k:gsub("\r", "\\r")
+	k = k:gsub("\t", "\\t")
+	k = k:gsub("\v", "\\v")
+	k = k:gsub("\32", "_")
+	return (old_str ~= k)
+end
+
+local fast_call_data = {
+	{ "UNKNOWN_FASTCALL", 0, 0 }, -- name, arguments, results
+	{ "assert", 2, -1 },
+
+	-- math
+	{ "math.abs", 1, 1 },
+	{ "math.acos", 1, 1 },
+	{ "math.asin", 1, 1 },
+	{ "math.atan2", 1, 1 },
+	{ "math.ceil", 1, 1 },
+	{ "math.deg", 1, 1 },
+	{ "math.exp", 1, 1 },
+	{ "math.floor", 1, 1 },
+}
+
+local fast_call_string = {
+	[0] = "UNKNOWN_FASTCALL",
+	"assert",
+
+	"math.abs",
+	"math.acos",
+	"math.asin",
+	"math.atan2",
+	"math.atan",
+	"math.ceil",
+	"math.cosh",
+	"math.cos",
+	"math.deg",
+	"math.exp",
+	"math.floor",
+	"math.fmod",
+	"math.frexp",
+	"math.ldexp",
+	"math.log10",
+	"math.log",
+	"math.max",
+	"math.min",
+	"math.modf",
+	"math.pow",
+	"math.rad",
+	"math.sinh",
+	"math.sin",
+	"math.sqrt",
+	"math.tanh",
+	"math.tan",
+
+	"bit32.arshift",
+	"bit32.band",
+	"bit32.bnot",
+	"bit32.bor",
+	"bit32.bxor",
+	"bit32.btest",
+	"bit32.extract",
+	"bit32.lrotate",
+	"bit32.lshift",
+	"bit32.replace",
+	"bit32.rrotate",
+	"bit32.rshift",
+
+	"type",
+
+	"string.byte",
+	"string.char",
+	"string.len",
+
+	"typeof",
+
+	"string.sub",
+
+	"math.clamp",
+	"math.sign",
+	"math.round",
+
+	"rawset",
+	"rawget",
+	"rawequal",
+
+	"table.tinsert",
+	"table.unpack",
+
+	'Vector3.new', -- maybe idk
+
+	"bit32.countlz",
+	"bit32.countrz",
+
+	"select",
+
+	"rawlen",
+
+	'bit32.extractk',
+
+	"getmetatable",
+	"setmetatable",
+
+	-- 64 bit stuff (roblo)
+	"luauF_missing", "luauF_missing", "luauF_missing", "luauF_missing", "luauF_missing", "luauF_missing", "luauF_missing", "luauF_missing",
+	"luauF_missing", "luauF_missing", "luauF_missing", "luauF_missing", "luauF_missing", "luauF_missing", "luauF_missing", "luauF_missing",
+	"luauF_missing", "luauF_missing", "luauF_missing", "luauF_missing", "luauF_missing", "luauF_missing", "luauF_missing", "luauF_missing",
+	"luauF_missing", "luauF_missing", "luauF_missing", "luauF_missing", "luauF_missing", "luauF_missing", "luauF_missing", "luauF_missing",
+	"luauF_missing", "luauF_missing", "luauF_missing", "luauF_missing", "luauF_missing", "luauF_missing", "luauF_missing", "luauF_missing",
+	"luauF_missing", "luauF_missing", "luauF_missing", "luauF_missing", "luauF_missing", "luauF_missing", "luauF_missing", "luauF_missing",
+	"luauF_missing", "luauF_missing", "luauF_missing", "luauF_missing", "luauF_missing", "luauF_missing", "luauF_missing", "luauF_missing",
+	"luauF_missing", "luauF_missing", "luauF_missing", "luauF_missing", "luauF_missing", "luauF_missing", "luauF_missing", "luauF_missing",
+}
 
 local function getluauoptable()
 	return {
@@ -268,7 +427,7 @@ luau.GETARG_sBx = function(i) local Bx = luau.GETARG_Bx(i) local sBx = Bx + 1; i
 luau.GETARG_sAx = function(i) return bit32.rshift(i, 8) end
 luau.GET_OPCODE = function(i) return bit32.band(bit32.rshift(i, luau.POS_OP), luau.MASK1(luau.SIZE_OP, 0)) end
 
-local function disassemble(a1, showOps)
+local function decompile_script(a1, showOps)
 	if (typeof(a1):lower() == "instance") then
 		if not getscriptbytecode then error("Executor does not support getscriptbytecode") end
 		a1 = getscriptbytecode(a1);
@@ -299,9 +458,8 @@ local function disassemble(a1, showOps)
 	mainProto.source = "main"
 	mainScope = {}; -- scope control, coming soon
 
-
 	local function readProto(proto, depth)
-		local output = "--decompiler by Stiven and vertov\n";
+		local output = "";
 
 		local function addTabSpace(depth)
 			output = output .. string.rep("    ", depth)
@@ -309,32 +467,37 @@ local function disassemble(a1, showOps)
 
 		-- using function name (this will be removed & done outside of readProto)
 		if proto.source then
-			output = output .. proto.source .. " = function("
+			if (proto.source ~= "main") then
+				output = output .. proto.source .. " = function("
+			end
 		else
 			output = output .. "function("
 		end
 
-		for i = 1,proto.numParams do
-			output = output .. "arg" .. (i - 1) -- args coincide with stack index
-			if i < proto.numParams then
-				output = output .. ", "
+		if (proto.source and proto.source == "main") then 
+			output = output .. ("-- this script was decompiled by Large Games's decompiler!\n");
+		else 
+			for i = 1,proto.numParams do
+				output = output .. "a" .. (i - 1) -- args coincide with stack index
+				if i < proto.numParams then
+					output = output .. ", "
+				end
 			end
-		end
 
-		if proto.isVarArg ~= 0 then
-			if proto.numParams > 0 then
-				output = output .. ", "
+			if proto.isVarArg ~= 0 then
+				if proto.numParams > 0 then
+					output = output .. ", "
+				end
+				output = output .. "..."
 			end
-			output = output .. "..."
+
+			output = output .. ")\n"
+			depth = depth + 1
 		end
-
-		output = output .. ")\n"
-
-		depth = depth + 1
 
 		for i = 1,proto.numParams do
 			addTabSpace(depth);
-			output = output .. string.format("local var%i = arg%i\n", i - 1, i - 1);
+			output = output .. string.format("local v%i = a%i\n", i - 1, i - 1);
 		end
 
 		local refData = {}
@@ -359,32 +522,32 @@ local function disassemble(a1, showOps)
 
 				local opinfo;
 
-				for _,v in pairs(luauOpTable) do 
-					if v.number == opc then 
+				for _,v in pairs(luauOpTable) do
+					if v.number == opc then
 						opinfo = v
 						break;
 					end
 				end
 
-				--output = output .. tostring(codeIndex) .. ".   " 
+				--output = output .. "PC_" .. tostring(codeIndex) .. ":   "
 
 				if showOps and opinfo then
 					local str = opinfo.name .. string.rep(" ", 16 - string.len(opinfo.name))
 
 					if opinfo.type == "iA" then
-						str = str .. string.format("%i", A)
+						str = str .. string.format("A = %i\n", A)
 					elseif opinfo.type == "iAB" then
-						str = str .. string.format("%i %i", A, B)
+						str = str .. string.format(" A = %i B = %i", A, B)
 					elseif opinfo.type == "iAC" then
-						str = str .. string.format("%i %i", A, C)
+						str = str .. string.format("A = %i C = %i", A, C)
 					elseif opinfo.type == "iABx" then
-						str = str .. string.format("%i %i", A, Bx)
+						str = str .. string.format("A = %i Bx = %i", A, Bx)
 					elseif opinfo.type == "iAsBx" then
-						str = str .. string.format("%i %i", A, sBx)
+						str = str .. string.format("A = %i sBx = %i", A, sBx)
 					elseif opinfo.type == "isBx" then
-						str = str .. string.format("%i", sBx)
+						str = str .. string.format("sBx = %i", sBx)
 					elseif opinfo.type == "iABC" then
-						str = str .. string.format("%i %i %i", A, B, C)
+						str = str .. string.format("A = %i B = %i C = %i", A, B, C)
 					end
 
 					if opinfo.aux then
@@ -392,7 +555,8 @@ local function disassemble(a1, showOps)
 						markedAux = true
 					end
 
-					output = output .. str .. string.rep(" ", 40 - string.len(str))
+
+					output = output .. "--" .. str .. string.rep(" ", 40 - string.len(str)) .. "\n"
 				else
 					if opinfo then
 						if opinfo.aux then
@@ -402,7 +566,7 @@ local function disassemble(a1, showOps)
 				end
 
 				-- continue with disassembly (rough decompilation -- no scope/flow control)
-				-- 
+				--
 				local varsDefined = {};
 
 				local function defineVar(index, name)
@@ -439,51 +603,45 @@ local function disassemble(a1, showOps)
                 but tbh this runs just fine
                 ]]
 				if opc == getOpCode("LOADNIL") then
-					output = output .. (isVarDefined(A) and "" or "local ") .. string.format("var%i = nil", A)
+					output = output .. (isVarDefined(A) and "" or "local ") .. string.format("v%i = nil", A)
 				elseif opc == getOpCode("BREAK") then
 					output = output .. "break"
 				elseif opc == getOpCode("LOADK") then
 					local k = proto.kTable[Bx + 1] or nilValue;
-					output = output .. (isVarDefined(A) and "" or "local ") .. string.format("var%i = %s", A, (type(k.value) == "string") and ("\"" .. k.value .. "\"") or tostring(k.value))
+					output = output .. (isVarDefined(A) and "" or "local ") .. string.format("v%i = %s", A, get_constant_string(k.value))
 				elseif opc == getOpCode("LOADKX") then
 					local k = proto.kTable[aux + 1] or nilValue;
-					output = output .. (isVarDefined(A) and "" or "local ") .. string.format("var%i = %s", A, (type(k.value) == "string") and ("\"" .. k.value .. "\"") or tostring(k.value))
+					output = output .. (isVarDefined(A) and "" or "local ") .. string.format("v%i = %s", A, get_constant_string(k.value))
 				elseif opc == getOpCode("LOADB") then
-					output = output .. (isVarDefined(A) and "" or "local ") .. string.format("var%i = %s", A, tostring(B == 1))
+					output = output .. (isVarDefined(A) and "" or "local ") .. string.format("v%i = %s", A, tostring(B == 1))
 				elseif opc == getOpCode("LOADN") then
-					output = output .. (isVarDefined(A) and "" or "local ") .. string.format("var%i = %s", A, tostring(Bx))
+					output = output .. (isVarDefined(A) and "" or "local ") .. string.format("v%i = %s", A, tostring(Bx))
 				elseif opc == getOpCode("GETUPVAL") then
-					output = output .. (isVarDefined(A) and "" or "local ") .. string.format("var%i = upvs[%i]", A, B)
+					output = output .. (isVarDefined(A) and "" or "local ") .. string.format("v%i = upvs[%i]", A, B)
 				elseif opc == getOpCode("SETUPVAL") then
-					output = output .. string.format("upvs[%i] = var%i", B, A)
+					output = output .. string.format("upvs[%i] = v%i", B, A)
 				elseif opc == getOpCode("MOVE") then
-					output = output .. (isVarDefined(A) and "" or "local ") .. string.format("var%i = var%i", A, B)
+					output = output .. (isVarDefined(A) and "" or "local ") .. string.format("v%i = v%i", A, B)
 				elseif opc == getOpCode("LEN") then
-					output = output .. (isVarDefined(A) and "" or "local ") .. string.format("var%i = #var%i", A, B)
+					output = output .. (isVarDefined(A) and "" or "local ") .. string.format("v%i = #v%i", A, B)
 				elseif opc == getOpCode("UNM") then
-					output = output .. (isVarDefined(A) and "" or "local ") .. string.format("var%i = -var%i", A, B)
+					output = output .. (isVarDefined(A) and "" or "local ") .. string.format("v%i = -v%i", A, B)
 				elseif opc == getOpCode("NOT") then
-					output = output .. (isVarDefined(A) and "" or "local ") .. string.format("var%i = not var%i", A, B)
+					output = output .. (isVarDefined(A) and "" or "local ") .. string.format("v%i = not v%i", A, B)
 				elseif opc == getOpCode("GETVARARGS") then
-					output = output .. (isVarDefined(A) and "" or "local ") .. string.format("var%i = ...", A)
+					output = output .. (isVarDefined(A) and "" or "local ") .. string.format("v%i = ...", A)
 				elseif opc == getOpCode("CONCAT") then
-					output = output .. (isVarDefined(A) and "" or "local ") .. string.format("var%i = var%i .. var%i", A, B, C)
+					output = output .. (isVarDefined(A) and "" or "local ") .. string.format("v%i = v%i .. v%i", A, B, C)
 				elseif opc == getOpCode("AND") then
-					output = output .. (isVarDefined(A) and "" or "local ") .. string.format("var%i = var%i and var%i", A, B, C)
+					output = output .. (isVarDefined(A) and "" or "local ") .. string.format("v%i = v%i and v%i", A, B, C)
 				elseif opc == getOpCode("OR") then
-					output = output .. (isVarDefined(A) and "" or "local ") .. string.format("var%i = var%i or var%i", A, B, C)
+					output = output .. (isVarDefined(A) and "" or "local ") .. string.format("v%i = v%i or v%i", A, B, C)
 				elseif opc == getOpCode("ANDK") then
 					local k = proto.kTable[C + 1] or nilValue;
-					output = output .. (isVarDefined(A) and "" or "local ") .. string.format("var%i = var%i and %s", A, B, tostring(k.value))
+					output = output .. (isVarDefined(A) and "" or "local ") .. string.format("v%i = v%i and %s", A, B, get_constant_string(k.value))
 				elseif opc == getOpCode("ORK") then
 					local k = proto.kTable[C + 1] or nilValue;
-					output = output .. (isVarDefined(A) and "" or "local ") .. string.format("var%i = var%i or %s", A, B, tostring(k.value))
-				elseif opc == getOpCode("FASTCALL") then
-					output = output .. string.format("FASTCALL[id=%i]()", A, B);
-				elseif opc == getOpCode("FASTCALL2") then
-					output = output .. string.format("FASTCALL[id=%i]()", A, B);
-				elseif opc == getOpCode("FASTCALL2K") then
-					output = output .. string.format("FASTCALL[id=%i]()", A, B);
+					output = output .. (isVarDefined(A) and "" or "local ") .. string.format("v%i = v%i or %s", A, B, get_constant_string(k.value))
 				elseif opc == getOpCode("GETIMPORT") then
 					local indexCount = bit32.band(bit32.rshift(aux, 30), 0x3FF) -- 0x40000000 --> 1, 0x80000000 --> 2
 					local cacheIndex1 = bit32.band(bit32.rshift(aux, 20), 0x3FF)
@@ -493,169 +651,185 @@ local function disassemble(a1, showOps)
 					if indexCount == 1 then
 						local k1 = proto.kTable[cacheIndex1 + 1];
 
-						output = output .. (isVarDefined(A) and "" or "local ") .. string.format("var%i = %s", A, tostring(k1.value))
+						output = output .. (isVarDefined(A) and "" or "local ") .. string.format("v%i = %s", A, tostring(k1.value))
 					elseif indexCount == 2 then
 						local k1 = proto.kTable[cacheIndex1 + 1];
 						local k2 = proto.kTable[cacheIndex2 + 1];
 
-						output = output .. (isVarDefined(A) and "" or "local ") .. string.format("var%i = %s[\"%s\"]", A, k1.value, tostring(k2.value))
+						output = output .. (isVarDefined(A) and "" or "local ") .. ("v%i = %s"):format(A, k1.value)
+
+						if (type(k2.value) == "string") then 
+							if (is_whitespace(k2.value) == false) then 
+								output = output .. (isVarDefined(A) and "" or "local ") .. string.format(".%s", A, B, k2.value)
+							else 
+								output = output .. (isVarDefined(A) and "" or "local ") .. string.format("[%s]", A, B, get_constant_string(k2.value))
+							end
+						else 
+							output = output .. (isVarDefined(A) and "" or "local ") .. string.format("[%s]", A, B, get_constant_string(k2.value))
+						end
+
+						--output = output .. (isVarDefined(A) and "" or "local ") .. string.format("v%i = %s[\"%s\"]", A, k1.value, tostring(k2.value))
 					elseif indexCount == 3 then
 						local k1 = proto.kTable[cacheIndex1 + 1];
 						local k2 = proto.kTable[cacheIndex2 + 1];
 						local k3 = proto.kTable[cacheIndex3 + 1];
 
-						output = output .. (isVarDefined(A) and "" or "local ") .. string.format("var%i = %s[\"%s\"][\"%s\"]", A, k1.value, tostring(k2.value), tostring(k3.value))
+						output = output .. (isVarDefined(A) and "" or "local ") .. ("v%i = %s"):format(A, k1.value)
+
+						if (type(k2.value) == "string") then 
+							if (is_whitespace(k2.value) == false) then 
+								output = output .. (isVarDefined(A) and "" or "local ") .. string.format(".%s", A, B, k2.value)
+							else 
+								output = output .. (isVarDefined(A) and "" or "local ") .. string.format("[%s]", A, B, get_constant_string(k2.value))
+							end
+						else 
+							output = output .. (isVarDefined(A) and "" or "local ") .. string.format("[%s]", A, B, get_constant_string(k2.value))
+						end
+
+						if (type(k3.value) == "string") then 
+							if (is_whitespace(k3.value) == false) then 
+								output = output .. (isVarDefined(A) and "" or "local ") .. string.format(".%s", A, B, k3.value)
+							else 
+								output = output .. (isVarDefined(A) and "" or "local ") .. string.format("[%s]", A, B, get_constant_string(k3.value))
+							end
+						else 
+							output = output .. (isVarDefined(A) and "" or "local ") .. string.format("[%s]", A, B, get_constant_string(k3.value))
+						end
+
+						--output = output .. (isVarDefined(A) and "" or "local ") .. string.format("v%i = %s[\"%s\"][\"%s\"]", A, k1.value, tostring(k2.value), tostring(k3.value))
 					else
 						error("[GETIMPORT] Too many entries");
 					end
 				elseif opc == getOpCode("GETGLOBAL") then
 					local k = proto.kTable[aux + 1] or nilValue;
-					output = output .. string.format("var%i = %s", A, tostring(k.value))
+					output = output .. string.format("v%i = %s", A, tostring(k.value))
 				elseif opc == getOpCode("SETGLOBAL") then
 					local k = proto.kTable[aux + 1] or nilValue;
-					output = output .. string.format("%s = var%i", tostring(k.value), A)
+					output = output .. string.format("%s = v%i", tostring(k.value), A)
 				elseif opc == getOpCode("GETTABLE") then
-					output = output .. (isVarDefined(A) and "" or "local ") .. string.format("var%i = var%i[var%i]", A, B, C)
+					output = output .. (isVarDefined(A) and "" or "local ") .. string.format("v%i = v%i[v%i]", A, B, C)
 				elseif opc == getOpCode("SETTABLE") then
-					output = output .. string.format("var%i[var%i] = var%i", B, C, A)
+					output = output .. string.format("v%i[v%i] = v%i", B, C, A)
 				elseif opc == getOpCode("GETTABLEN") then
-					output = output .. (isVarDefined(A) and "" or "local ") .. string.format("var%i = var%i[%i]", A, B, C - 1)
+					output = output .. (isVarDefined(A) and "" or "local ") .. string.format("v%i = v%i[%i]", A, B, C - 1)
 				elseif opc == getOpCode("SETTABLEN") then
-					output = output .. string.format("var%i[%i] = var%i", B, C - 1, A)
+					output = output .. string.format("v%i[%i] = v%i", B, C - 1, A)
 				elseif opc == getOpCode("GETTABLEKS") then
 					local k = proto.kTable[aux + 1] or nilValue;
-					output = output .. (isVarDefined(A) and "" or "local ") .. string.format("var%i = var%i[%s]", A, B, (type(k.value) == "string") and ("\"" .. k.value .. "\"") or tostring(k.value))
+
+					if (type(k.value) == "string") then 
+						if (is_whitespace(k.value) == false) then 
+							output = output .. (isVarDefined(A) and "" or "local ") .. string.format("v%i = v%i.%s", A, B, k.value)
+						else 
+							output = output .. (isVarDefined(A) and "" or "local ") .. string.format("v%i = v%i[%s]", A, B, get_constant_string(k.value))
+						end
+					else 
+						output = output .. (isVarDefined(A) and "" or "local ") .. string.format("v%i = v%i[%s]", A, B, get_constant_string(k.value))
+					end
 				elseif opc == getOpCode("SETTABLEKS") then
 					local k = proto.kTable[aux + 1] or nilValue;
-					output = output .. string.format("var%i[%s] = var%i", B, (type(k.value) == "string") and ("\"" .. k.value .. "\"") or tostring(k.value), A)
+
+					if (type(k.value) == "string") then 
+						if (is_whitespace(k.value) == false) then 
+							output = output .. string.format("v%i.%s = v%i", B, k.value, A)
+						else 
+							output = output .. string.format("v%i[%s] = v%i", B, get_constant_string(k.value), A)
+						end
+					else 
+						output = output .. string.format("v%i[%s] = v%i", B, get_constant_string(k.value), A)
+					end
 				elseif opc == getOpCode("NAMECALL") then
 					local k = proto.kTable[aux + 1] or nilValue;
-					nameCall = string.format("var%i:%s", B, tostring(k.value))
+					nameCall = string.format("v%i:%s", B, tostring(k.value))
 					markedAux = true;
-				--elseif opc == getOpCode("NFORPREP") then
-				--	output = output .. string.format("-- nforprep start - [escape at #%i] -- var%i = iterator", (codeIndex + sBx) + 1, A + 3);
-				--elseif opc == getOpCode("NFORLOOP") then
-				--	output = output .. string.format("-- nforloop end - iterate + goto #%i", codeIndex + sBx);
-				--elseif opc == getOpCode("PAIRSPREP") then
-				--	output = output .. string.format("-- pairsprep start - [escape at #%i] -- var%i = key, var%i = value", (codeIndex + sBx) + 1, A + 3, A + 4);
-				--elseif opc == getOpCode("PAIRSLOOP") then
-				--	output = output .. string.format("-- pairsloop end - iterate + goto #%i", codeIndex + sBx);
-				--elseif opc == getOpCode("IPAIRSPREP") then
-				--	output = output .. string.format("-- ipairsprep start [escape at #%i] -- var%i = key, var%i = value", (codeIndex + sBx) + 1, A + 3, A + 4);
-				--elseif opc == getOpCode("IPAIRSLOOP") then
-				--	output = output .. string.format("-- ipairsloop end - iterate + goto #%i", codeIndex + sBx);
-				--elseif opc == getOpCode("TFORLOOP") then
-				--	--output = output .. string.format("gforloop - iterate + goto #%i", codeIndex + aux);
-				--elseif opc == getOpCode("JUMP") then
-				--	addReference(codeIndex, codeIndex + sBx);
-				--	output = output .. string.format("-- goto #%i", codeIndex + sBx);
-				--elseif opc == getOpCode("JUMPBACK") then
-				--	addReference(codeIndex, codeIndex + sBx);
-				--	output = output .. string.format("-- goto #%i", codeIndex + sBx);
-				--elseif opc == getOpCode("JUMPX") then
-				--	addReference(codeIndex, codeIndex + sBx);
-				--	output = output .. string.format("-- goto #%i", codeIndex + sAx);
-				--elseif opc == getOpCode("JUMPIFEQK") then
-				--	local k = proto.kTable[aux + 1] or nilValue;
-				--	addReference(codeIndex, codeIndex + sBx);
-				--	output = output .. string.format("-- goto #%i if var%i == %s", codeIndex + sBx, A, (type(k.value) == "string") and ("\"" .. k.value .. "\"") or tostring(k.value));
-				--elseif opc == getOpCode("JUMPIFNOTEQK") then
-				--	local k = proto.kTable[aux + 1] or nilValue;
-				--	addReference(codeIndex, codeIndex + sBx);
-				--	output = output .. string.format("-- goto #%i if var%i ~= %s", codeIndex + sBx, A, (type(k.value) == "string") and ("\"" .. k.value .. "\"") or tostring(k.value));
-				--elseif opc == getOpCode("JUMPIF") then
-				--	addReference(codeIndex, codeIndex + sBx);
-				--	output = output .. string.format("-- goto #%i if var%i", codeIndex + sBx, A);
-				--elseif opc == getOpCode("JUMPIFNOT") then
-				--	addReference(codeIndex, codeIndex + sBx);
-				--	output = output .. string.format("-- goto #%i if not var%i", codeIndex + sBx, A);
-				--elseif opc == getOpCode("JUMPIFEQ") then
-				--	addReference(codeIndex, codeIndex + sBx);
-				--	output = output .. string.format("-- goto #%i if var%i == var%i", codeIndex + sBx, A, aux);
-				--elseif opc == getOpCode("JUMPIFNOTEQ") then
-				--	addReference(codeIndex, codeIndex + sBx);
-				--	output = output .. string.format("-- goto #%i if var%i ~= var%i", codeIndex + sBx, A, aux);
-				--elseif opc == getOpCode("JUMPIFLE") then
-				--	addReference(codeIndex, codeIndex + sBx);
-				--	output = output .. string.format("-- goto #%i if var%i <= var%i", codeIndex + sBx, A, aux);
-				--elseif opc == getOpCode("JUMPIFNOTLE") then
-				--	addReference(codeIndex, codeIndex + sBx);
-				--	output = output .. string.format("-- goto #%i if var%i > var%i", codeIndex + sBx, A, aux);
-				--elseif opc == getOpCode("JUMPIFLT") then
-				--	addReference(codeIndex, codeIndex + sBx);
-				--	output = output .. string.format("-- goto #%i if var%i < var%i", codeIndex + sBx, A, aux);
-				--elseif opc == getOpCode("JUMPIFNOTLT") then
-				--	addReference(codeIndex, codeIndex + sBx);
-				--	output = output .. string.format("-- goto #%i if var%i >= var%i", codeIndex + sBx, A, aux);
 				elseif opc == getOpCode("ADD") then
-					output = output .. string.format("var%i = var%i + var%i", A, B, C);
+					output = output .. string.format("v%i = v%i + v%i", A, B, C);
 				elseif opc == getOpCode("ADDK") then
 					local k = proto.kTable[C + 1] or nilValue;
-					output = output .. (isVarDefined(A) and "" or "local ") .. string.format("var%i = var%i + %s", A, B, tostring(k.value));
+					output = output .. (isVarDefined(A) and "" or "local ") .. string.format("v%i = v%i + %s", A, B, tostring(k.value));
 				elseif opc == getOpCode("SUB") then
-					output = output .. (isVarDefined(A) and "" or "local ") .. string.format("var%i = var%i - var%i", A, B, C);
+					output = output .. (isVarDefined(A) and "" or "local ") .. string.format("v%i = v%i - v%i", A, B, C);
 				elseif opc == getOpCode("SUBK") then
 					local k = proto.kTable[C + 1] or nilValue;
-					output = output .. (isVarDefined(A) and "" or "local ") .. string.format("var%i = var%i - %s", A, B, tostring(k.value));
+					output = output .. (isVarDefined(A) and "" or "local ") .. string.format("v%i = v%i - %s", A, B, tostring(k.value));
 				elseif opc == getOpCode("MUL") then
-					output = output .. (isVarDefined(A) and "" or "local ") .. string.format("var%i = var%i * var%i", A, B, C);
+					output = output .. (isVarDefined(A) and "" or "local ") .. string.format("v%i = v%i * v%i", A, B, C);
 				elseif opc == getOpCode("MULK") then
 					local k = proto.kTable[C + 1] or nilValue;
-					output = output .. (isVarDefined(A) and "" or "local ") .. string.format("var%i = var%i * %s", A, B, tostring(k.value));
+					output = output .. (isVarDefined(A) and "" or "local ") .. string.format("v%i = v%i * %s", A, B, tostring(k.value));
 				elseif opc == getOpCode("DIV") then
-					output = output .. (isVarDefined(A) and "" or "local ") .. string.format("var%i = var%i / var%i", A, B, C);
+					output = output .. (isVarDefined(A) and "" or "local ") .. string.format("v%i = v%i / v%i", A, B, C);
 				elseif opc == getOpCode("DIVK") then
 					local k = proto.kTable[C + 1] or nilValue;
-					output = output .. (isVarDefined(A) and "" or "local ") .. string.format("var%i = var%i / %s", A, B, tostring(k.value));
+					output = output .. (isVarDefined(A) and "" or "local ") .. string.format("v%i = v%i / %s", A, B, tostring(k.value));
 				elseif opc == getOpCode("MOD") then
-					output = output .. (isVarDefined(A) and "" or "local ") .. string.format("var%i = var%i %% var%i", A, B, C);
+					output = output .. (isVarDefined(A) and "" or "local ") .. string.format("v%i = v%i % v%i", A, B, C);
 				elseif opc == getOpCode("MODK") then
 					local k = proto.kTable[C + 1] or nilValue;
-					output = output .. (isVarDefined(A) and "" or "local ") .. string.format("var%i = var%i %% %s", A, B, tostring(k.value));
+					output = output .. (isVarDefined(A) and "" or "local ") .. string.format("v%i = v%i % %s", A, B, tostring(k.value));
 				elseif opc == getOpCode("POW") then
-					output = output .. (isVarDefined(A) and "" or "local ") .. string.format("var%i = var%i ^ var%i", A, B, C);
+					output = output .. (isVarDefined(A) and "" or "local ") .. string.format("v%i = v%i ^ v%i", A, B, C);
 				elseif opc == getOpCode("POWK") then
 					local k = proto.kTable[C + 1] or nilValue;
-					output = output .. (isVarDefined(A) and "" or "local ") .. string.format("var%i = var%i ^ %s", A, B, tostring(k.value));
+					output = output .. (isVarDefined(A) and "" or "local ") .. string.format("v%i = v%i ^ %s", A, B, tostring(k.value));
 				elseif opc == getOpCode("CALL") then
 					if C > 1 then
 						for j = 1, C - 1 do
-							output = output .. string.format("var%i", A + j - 1)
+							output = output .. string.format("v%i", A + j - 1)
 							if j < C - 1 then output = output .. ", " end
 						end
 						output = output .. " = "
 					elseif C == 0 then
-						output = output .. string.format("var%i, _", A);
+						output = output .. string.format("v%i, ...", A);
 						output = output .. " = "
 						--for j = 1, proto.maxStackSize do
-						--    output = output .. string.format("var%i", A + j - 1)
+						--    output = output .. string.format("v%i", A + j - 1)
+						--    if j < proto.maxStackSize - 1 then output = output .. ", " end
+						--end
+					elseif C == -1 then
+						output = output .. string.format("...", A);
+						output = output .. " = "
+						--for j = 1, proto.maxStackSize do
+						--    output = output .. string.format("v%i", A + j - 1)
 						--    if j < proto.maxStackSize - 1 then output = output .. ", " end
 						--end
 					end
+
 					if nameCall then
 						output = output .. nameCall .. "(";
 					else
-						output = output .. string.format("var%i(", A)
+						output = output .. string.format("v%i(", A)
 					end
+
 					if B > 1 then
 						if nameCall then
+							local looped = false
 							for j = 1, B - 2 do
-								output = output .. string.format("var%i", A + 1 + j) -- exclude self
-								if j < B - 2 then output = output .. ", " end
+								output = output .. string.format("v%i, ", A + 1 + j) -- exclude self
+								looped = true
+							end
+
+							if (looped) then 
+								output = output:sub(0, output:len() - 2)
 							end
 						else
+							local looped = false
 							for j = 1, B - 1 do
-								output = output .. string.format("var%i", A + j)
-								if j < B - 1 then output = output .. ", " end
+								output = output .. string.format("v%i, ", A + j)
+								looped = true
+							end
+
+							if (looped) then 
+								output = output:sub(0, output:len() - 2)
 							end
 						end
 					elseif B == 0 then
-						output = output .. string.format("var%i, _", A + 1);
+						output = output .. string.format("v%i, ...", A + 1);
 						--for j = 1, proto.maxStackSize do
 						--    if nameCall then
-						--        output = output .. string.format("var%i", A + 1 + j) -- exclude self
+						--        output = output .. string.format("v%i", A + 1 + j) -- exclude self
 						--    else
-						--        output = output .. string.format("var%i", A + j)
+						--        output = output .. string.format("v%i", A + j)
 						--    end
 						--    if j < proto.maxStackSize - 1 then output = output .. ", " end
 						--end
@@ -663,14 +837,14 @@ local function disassemble(a1, showOps)
 					nameCall = nil;
 					output = output .. ")";
 				elseif opc == getOpCode("NEWTABLE") then
-					output = output .. (isVarDefined(A) and "" or "local ") .. string.format("var%i = {}", A)
+					output = output .. (isVarDefined(A) and "" or "local ") .. string.format("v%i = {}", A)
 				elseif opc == getOpCode("DUPTABLE") then
 					local t = proto.kTable[Bx + 1].value;
-					output = output .. (isVarDefined(A) and "" or "local ") .. string.format("var%i = { ", A)
+					output = output .. (isVarDefined(A) and "" or "local ") .. string.format("v%i = { ", A)
 					for j = 1,t.size do
 						local id = t.ids[j];
 						local k = proto.kTable[id];
-						output = output .. ((type(k.value) == "string") and ("\"" .. k.value .. "\"") or tostring(k.value))
+						output = output .. (get_constant_string(k.value))
 						if j < t.size then
 							output = output .. ", ";
 						end
@@ -681,7 +855,7 @@ local function disassemble(a1, showOps)
 					output = output .. "\n"
 					for j = 1, C do
 						addTabSpace(depth);
-						output = output .. string.format("var%i[%i] = var%i\n", A, j + fieldSize - 1, B + j - 1);
+						output = output .. string.format("v%i[%i] = v%i\n", A, j + fieldSize - 1, B + j - 1);
 					end
 				elseif opc == getOpCode("CAPTURE") then
 					markedAux = true;
@@ -700,13 +874,6 @@ local function disassemble(a1, showOps)
 							nCaptures = nCaptures + 1;
 
 							addTabSpace(depth);
-							if captureType == 0 or captureType == 1 then
-								output = output .. string.format("-- V nested upvs[%i] = var%i\n", upvalueIndex, captureIndex)
-							elseif captureType == 2 then
-								output = output .. string.format("-- V nested upvs[%i] = upvs[%i]\n", upvalueIndex, captureIndex)
-							else
-								error("[NEWCLOSURE] Invalid capture type");
-							end
 						end
 					end
 					codeIndex = codeIndex + nCaptures;
@@ -716,10 +883,10 @@ local function disassemble(a1, showOps)
 					if nextProto.source then
 						output = output .. readProto(nextProto, depth)
 						addTabSpace(depth);
-						output = output .. string.format("var%i = ", A) .. nextProto.source
+						output = output .. string.format("v%i = ", A) .. nextProto.source
 					else
 						nextProto.source = nil;
-						output = output .. string.format("var%i = ", A) .. readProto(nextProto, depth)
+						output = output .. string.format("v%i = ", A) .. readProto(nextProto, depth)
 					end
 				elseif opc == getOpCode("DUPCLOSURE") then
 					output = output .. "\n"
@@ -736,13 +903,6 @@ local function disassemble(a1, showOps)
 							nCaptures = nCaptures + 1;
 
 							addTabSpace(depth);
-							if captureType == 0 or captureType == 1 then
-								output = output .. string.format("-- V nested upvs[%i] = var%i\n", upvalueIndex, captureIndex)
-							elseif captureType == 2 then
-								output = output .. string.format("-- V nested upvs[%i] = upvs[%i]\n", upvalueIndex, captureIndex)
-							else
-								error("[DUPCLOSURE] Invalid capture type");
-							end
 						end
 					end
 					codeIndex = codeIndex + nCaptures;
@@ -752,34 +912,34 @@ local function disassemble(a1, showOps)
 					if nextProto.source then
 						output = output .. readProto(nextProto, depth)
 						addTabSpace(depth);
-						output = output .. string.format("var%i = ", A) .. nextProto.source
+						output = output .. string.format("v%i = ", A) .. nextProto.source
 					else
 						nextProto.source = nil;
-						output = output .. string.format("var%i = ", A) .. readProto(nextProto, depth)
+						output = output .. string.format("v%i = ", A) .. readProto(nextProto, depth)
 					end
 				elseif opc == getOpCode("RETURN") then
 					if B > 1 then
 						output = output .. "return ";
 						for j = 1, B - 1 do
-							output = output .. string.format("var%i", A + j)
+							output = output .. string.format("v%i", A + j)
 							if j < B - 1 then output = output .. ", " end
 						end
 					elseif B == 0 then
-						output = output .. string.format("var%i, ...", A)
+						output = output .. string.format("v%i, ...", A)
 					end
 				end
 
-				for _,v in pairs(refData) do
-					if v.codeIndex == codeIndex then
-						
-						for j = 1,#v.refs do
-							output = output .. "--#" .. v.refs[j]
-							if j < #v.refs then
-								output = output .. ", "
-							end
-						end
-					end
-				end
+				--for _,v in pairs(refData) do
+				--	if v.codeIndex == codeIndex then
+				--		output = output .. " -- referenced by "
+				--		for j = 1,#v.refs do
+				--			output = output .. "#" .. v.refs[j]
+				--			if j < #v.refs - 1 then
+				--				output = output .. ", "
+				--			end
+				--		end
+				--	end
+				--end
 
 				output = output .. "\n"
 			end
@@ -790,7 +950,11 @@ local function disassemble(a1, showOps)
 		depth = depth - 1
 
 		addTabSpace(depth)
-		output = output .. "end\n"
+
+		if (proto.source == nil or proto.source ~= "main") then 
+			output = output .. "end\n"
+		end
+
 		return output;
 	end
 
@@ -799,5 +963,10 @@ local function disassemble(a1, showOps)
 
 	return output
 end
+
+disassemble = (function(script)
+	return decompile_script(script)
+end)
+
 
 writefile("decompiled.lua", disassemble(game.StarterPlayer.StarterPlayerScripts.Scripts.Game.Machines.Daycare))
