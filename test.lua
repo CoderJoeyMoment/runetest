@@ -773,7 +773,7 @@ local function disassemble(a1, showOps)
 					if v.codeIndex == codeIndex then
 						
 						for j = 1,#v.refs do
-							output = output .. "#" .. v.refs[j]
+							output = output .. "--#" .. v.refs[j]
 							if j < #v.refs then
 								output = output .. ", "
 							end
