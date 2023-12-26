@@ -1267,5 +1267,6 @@ disassemble = (function(script)
 	return decompile_script(script)
 end)
 
+print(disassemble(game.StarterPlayer.StarterPlayerScripts.Scripts.Game.Machines.Daycare))
 
 writefile("decompiled.lua", disassemble(game.StarterPlayer.StarterPlayerScripts.Scripts.Game.Machines.Daycare))
